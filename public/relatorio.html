@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bike Park Pro - Financeiro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
+    <style>
+        :root { --primary-color: #4361ee; --secondary-color: #3f37c9; --accent-color: #2ec4b6; --bg-body: #f8f9fc; --success-color: #2ec4b6; }
+        body { background-color: var(--bg-body); font-family: 'Inter', sans-serif; color: #333; overflow-x: hidden; }
+
+        /* Navbar Padronizada */
+        .navbar { background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); padding: 1rem 0; border: none; }
+        .navbar-brand { font-weight: 700; transition: 0.3s; display: flex; align-items: center; }
+        
+        .bike-icon-animate {
+            color: #fff; /* Padronizado: Branco na Navbar */
+            margin-right: 12px;
+            display: inline-block;
+            animation: bikeBounceIndex 2s infinite ease-in-out;
+        }
+
+        @keyframes bikeBounceIndex {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* Cards Padronizados (Mesmo do Index) */
+        .card { border: none; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.04); animation: slideUp 0.6s ease-out; }
+        .stat-card { border-left: 6px solid var(--primary-color); position: relative; overflow: hidden; }
+        .stat-icon { position: absolute; right: 15px; bottom: 10px; font-size: 3rem; opacity: 0.1; color: var(--primary-color); }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Busca */
+        .search-box { border-radius: 50px; padding: 0.8rem 1rem 0.8rem 3.5rem; border: 2px solid #e0e7ff; transition: 0.3s; }
+        .search-box:focus { border-color: var(--primary-color); box-shadow: 0 0 20px rgba(67, 97, 238, 0.1); outline: none; }
+        .search-container { position: relative; animation: slideUp 0.8s ease-out; }
+        .search-container i { position: absolute; left: 20px; top: 50%; transform: translateY(-50%); color: var(--primary-color); }
+
+        /* Tabela */
+        .table-container { animation: slideUp 1s ease-out; }
+        .table { background: white; border-radius: 20px; vertical-align: middle; }
+        .badge-ficha { background: #f0f3ff; color: var(--primary-color); font-weight: 800; border: 1px solid #e0e7ff; padding: 0.6rem 0.8rem; border-radius: 10px; }
+        .badge-valor { font-size: 1.1rem; font-weight: 800; color: var(--success-color); }
+        
+        .btn-export { background: linear-gradient(135deg, #2ec4b6, #28a745); border: none; color: white; transition: 0.3s; }
+        .btn-export:hover { transform: scale(1.05); color: white; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark shadow-lg mb-4">
+        <div class="container d-flex justify-content-between align-items-center">
+            <a href="welcome.html" class="navbar-brand h1 mb-0 text-decoration-none">
+                <i class="fa-solid fa-bicycle bike-icon-animate"></i> 
+                <span>BIKE PARK <span class="fw-light">PRO</span></span>
+            </a>
+            <div class="d-flex gap-2">
+                <button onclick="exportarExcel()" class="btn btn-export btn-sm fw-bold px-4 rounded-pill">
+                    <i class="fa-solid fa-file-excel me-1"></i> EXCEL
+                </button>
+                <a href="index.html" class="btn btn-light btn-sm fw-bold px-4 rounded-pill shadow-sm">VOLTAR</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="row mb-4 g-3">
+            <div class="col-md-6">
+                <div class="card stat-card p-4 h-100 bg-white">
+                    <h6 class="text-muted small fw-bold">RECEITA ACUMULADA</h6>
+                    <h2 class="fw-bold mb-0 text-dark" id="lucroTotal">R$ 0,00</h2>
+                    <i class="fa-solid fa-money-bill-trend-up stat-icon"></i>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card stat-card p-4 h-100 bg-white">
+                    <h6 class="text-muted small fw-bold">TOTAL DE SAÍDAS</h6>
+                    <h2 class="fw-bold mb-0 text-dark" id="totalAtendidos">0</h2>
+                    <i class="fa-solid fa-users stat-icon"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-container mb-4">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="inputBusca" class="form-control search-box" placeholder="Buscar por ficha, marca ou modelo..." onkeyup="filtrarTabela()">
+        </div>
+
+        <div class="table-container mb-5">
+            <div class="card shadow-sm border-0 overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th class="ps-4" onclick="ordenar('identificacao')" style="cursor:pointer">Ficha <i class="fa-solid fa-sort"></i></th>
+                                <th onclick="ordenar('marca')" style="cursor:pointer">Veículo <i class="fa-solid fa-sort"></i></th>
+                                <th onclick="ordenar('entrada')" style="cursor:pointer">Estadia <i class="fa-solid fa-sort"></i></th>
+                                <th>Observações</th>
+                                <th class="text-center" onclick="ordenar('valor')" style="cursor:pointer">Valor <i class="fa-solid fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-historico"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let dadosOriginais = [];
+        let colunaAtiva = 'entrada';
+        let ordemCrescente = false;
+
+        async function carregarRelatorio() {
+            try {
+                const res = await fetch('/estatisticas');
+                const data = await res.json();
+                dadosOriginais = data.historico;
+                document.getElementById('lucroTotal').innerText = `R$ ${data.lucroTotal.toFixed(2)}`;
+                document.getElementById('totalAtendidos').innerText = data.totalAtendidos;
+                renderizarTabela(dadosOriginais);
+            } catch (error) { console.error(error); }
+        }
+
+        function renderizarTabela(lista) {
+            const corpo = document.getElementById('tabela-historico');
+            corpo.innerHTML = '';
+            lista.forEach(reg => {
+                const dEntrada = new Date(reg.entrada).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                const dSaida = reg.saida ? new Date(reg.saida).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '---';
+                corpo.innerHTML += `
+                    <tr>
+                        <td class="ps-4"><span class="badge-ficha">#${reg.identificacao}</span></td>
+                        <td><div class="fw-bold">${reg.marca}</div><div class="small text-muted">ARO ${reg.aro} • ${reg.cor}</div></td>
+                        <td><div class="small text-success">↑ ${dEntrada}</div><div class="small text-danger">↓ ${dSaida}</div></td>
+                        <td class="small text-muted">${reg.observacao || '-'}</td>
+                        <td class="text-center"><span class="badge-valor">R$ ${reg.valor.toFixed(2)}</span></td>
+                    </tr>`;
+            });
+        }
+
+        function filtrarTabela() {
+            const termo = document.getElementById('inputBusca').value.toUpperCase();
+            const filtrados = dadosOriginais.filter(i => i.identificacao.includes(termo) || i.marca.toUpperCase().includes(termo) || (i.observacao && i.observacao.toUpperCase().includes(termo)));
+            renderizarTabela(filtrados);
+        }
+
+        function ordenar(coluna) {
+            if (colunaAtiva === coluna) { ordemCrescente = !ordemCrescente; } 
+            else { colunaAtiva = coluna; ordemCrescente = true; }
+            const ordenados = [...dadosOriginais].sort((a, b) => {
+                let vA = a[coluna], vB = b[coluna];
+                if (coluna === 'entrada') { vA = new Date(vA); vB = new Date(vB); }
+                if (vA < vB) return ordemCrescente ? -1 : 1;
+                if (vA > vB) return ordemCrescente ? 1 : -1;
+                return 0;
+            });
+            renderizarTabela(ordenados);
+        }
+
+        function exportarExcel() {
+            let csv = "Ficha;Veiculo;Entrada;Saida;Notas;Valor\n";
+            dadosOriginais.forEach(r => { csv += `${r.identificacao};${r.marca};${r.entrada};${r.saida};${r.observacao || ''};${r.valor}\n`; });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "Relatorio_BikePark.csv";
+            link.click();
+        }
+
+        carregarRelatorio();
+    </script>
+</body>
+</html>
