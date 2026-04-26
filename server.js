@@ -1,110 +1,133 @@
 const express = require('express');
-const { Sequelize, DataTypes, Op } = require('sequelize');
+const path = require('path');
+const { Sequelize, DataTypes } = require('sequelize');
 const cors = require('cors');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-app.use(express.static('public'));
 
-// 1. CONEXÃO COM O BANCO
+// 1. CONEXÃO (Ajuste sua senha aqui)
 const sequelize = new Sequelize('estacionamento_db', 'postgres', 'postgres', {
     host: 'localhost',
     dialect: 'postgres',
-    port: 5432,
     logging: false
 });
 
 // 2. MODELOS
-const Registro = sequelize.define('Registro', {
-    identificacao: { type: DataTypes.STRING, allowNull: false },
-    marca: { type: DataTypes.STRING },
-    cor: { type: DataTypes.STRING },
-    aro: { type: DataTypes.STRING },
-    descricao: { type: DataTypes.STRING },
-    observacao: { type: DataTypes.TEXT },
-    valorHora: { type: DataTypes.FLOAT, defaultValue: 5.0 },
+const Categoria = sequelize.define('categoria', {
+    nome: { type: DataTypes.STRING, allowNull: false, unique: true },
+    valorHora: { type: DataTypes.FLOAT, allowNull: false }
+});
+
+const Marca = sequelize.define('marca', { nome: { type: DataTypes.STRING, allowNull: false, unique: true } });
+const Cor = sequelize.define('cor', { nome: { type: DataTypes.STRING, allowNull: false, unique: true } });
+const Aro = sequelize.define('aro', { nome: { type: DataTypes.STRING, allowNull: false, unique: true } });
+
+const Registro = sequelize.define('registro', {
+    identificacao: { type: DataTypes.STRING },
+    nomeUsuario: { type: DataTypes.STRING, allowNull: false },
     entrada: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     saida: { type: DataTypes.DATE },
-    valor: { type: DataTypes.FLOAT }
+    valorTotal: { type: DataTypes.FLOAT }
 });
 
-const Marca = sequelize.define('Marca', { nome: { type: DataTypes.STRING, unique: true } });
-const Cor = sequelize.define('Cor', { nome: { type: DataTypes.STRING, unique: true } });
-const Aro = sequelize.define('Aro', { tamanho: { type: DataTypes.STRING, unique: true } });
+// ASSOCIAÇÕES
+Registro.belongsTo(Categoria, { as: 'cat', foreignKey: 'CategoriaId' });
+Registro.belongsTo(Marca, { as: 'mrc', foreignKey: 'MarcaId' });
+Registro.belongsTo(Cor, { as: 'corRel', foreignKey: 'CorId' });
+Registro.belongsTo(Aro, { as: 'aroRel', foreignKey: 'AroId' });
 
-// 3. ROTAS
-app.get('/marcas', async (req, res) => res.json(await Marca.findAll({ order: [['nome', 'ASC']] })));
-app.get('/cores', async (req, res) => res.json(await Cor.findAll({ order: [['nome', 'ASC']] })));
-app.get('/aros', async (req, res) => res.json(await Aro.findAll({ order: [['tamanho', 'ASC']] })));
+// 3. FUNÇÃO MESTRA CRUD (Gera 5 rotas por entidade automaticamente)
+const gerarCRUD = (Model, rota) => {
+    // POST (Criar)
+    app.post(`/${rota}`, async (req, res) => res.status(201).json(await Model.create(req.body)));
+    // GET Lista (Ler todos)
+    app.get(`/${rota}`, async (req, res) => res.json(await Model.findAll({ order: [['id', 'ASC']] })));
+    // GET por ID (Ler um)
+    app.get(`/${rota}/:id`, async (req, res) => {
+        const item = await Model.findByPk(req.params.id);
+        item ? res.json(item) : res.status(404).json({ error: "Não encontrado" });
+    });
+    // PUT (Atualizar)
+    app.put(`/${rota}/:id`, async (req, res) => {
+        const item = await Model.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: "Não encontrado" });
+        await item.update(req.body);
+        res.json(item);
+    });
+    // DELETE (Apagar)
+    app.delete(`/${rota}/:id`, async (req, res) => {
+        const item = await Model.findByPk(req.params.id);
+        if (!item) return res.status(404).json({ error: "Não encontrado" });
+        await item.destroy();
+        res.json({ message: "Excluído com sucesso" });
+    });
+};
 
-app.get('/proxima-ficha', async (req, res) => {
+// Gerando os CRUDs automáticos
+gerarCRUD(Categoria, 'categorias');
+gerarCRUD(Marca, 'marcas');
+gerarCRUD(Cor, 'cores');
+gerarCRUD(Aro, 'aros');
+
+// 4. CRUD ESPECÍFICO DE REGISTROS (Com a Regra de Negócio)
+
+// POST - Entrada
+app.post('/registros', async (req, res) => {
     try {
-        const ultimo = await Registro.findOne({ order: [['id', 'DESC']] });
-        let proxima = 1;
-        if (ultimo && !isNaN(ultimo.identificacao)) proxima = parseInt(ultimo.identificacao) + 1;
-        res.json({ proxima: proxima.toString().padStart(3, '0') });
-    } catch (e) { res.json({ proxima: "001" }); }
-});
-
-app.post('/entrada', async (req, res) => {
-    try {
-        let { identificacao, marca, aro, cor, descricao, observacao, valorHora } = req.body;
-        if(marca) await Marca.findOrCreate({ where: { nome: marca.toUpperCase() } });
-        if(cor) await Cor.findOrCreate({ where: { nome: cor.toUpperCase() } });
-        if(aro) await Aro.findOrCreate({ where: { tamanho: aro.toUpperCase() } });
-
-        const novo = await Registro.create({ 
-            identificacao, marca, cor, aro, descricao, observacao, 
-            valorHora: parseFloat(valorHora) || 5.0 
-        });
+        const novo = await Registro.create(req.body);
         res.status(201).json(novo);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-app.get('/bikes-ativas', async (req, res) => {
-    res.json(await Registro.findAll({ where: { saida: null }, order: [['entrada', 'ASC']] }));
+// GET - Lista Ativos e Finalizados
+app.get('/registros', async (req, res) => {
+    res.json(await Registro.findAll({ include: ['cat', 'mrc', 'corRel', 'aroRel'], order: [['id', 'DESC']] }));
 });
 
-app.put('/saida/:id', async (req, res) => {
+// GET por ID
+app.get('/registros/:id', async (req, res) => {
+    const r = await Registro.findByPk(req.params.id, { include: ['cat', 'mrc', 'corRel', 'aroRel'] });
+    r ? res.json(r) : res.status(404).json({ error: "Registro não encontrado" });
+});
+
+// PUT - Saída com Cálculo de Horas (A REGRAS DE NEGÓCIO)
+app.put('/registros/:id', async (req, res) => {
     try {
-        const { observacaoFinal } = req.body;
-        const registro = await Registro.findByPk(req.params.id);
+        const registro = await Registro.findByPk(req.params.id, { include: ['cat'] });
+        if (!registro) return res.status(404).json({ error: "Registro não encontrado" });
+
         const agora = new Date();
-        const horas = Math.max(1, Math.ceil((agora - new Date(registro.entrada)) / (1000 * 60 * 60)));
-        const total = horas * registro.valorHora;
+        const diffMs = agora - new Date(registro.entrada);
+        const horasDecimais = diffMs / (1000 * 60 * 60);
+        
+        // Regra de Negócio: Proporcionalidade
+        const total = horasDecimais * registro.cat.valorHora;
 
-        let obsCompleta = registro.observacao || "";
-        if (observacaoFinal) {
-            obsCompleta += (obsCompleta ? " | FINALIZAÇÃO: " : "FINALIZAÇÃO: ") + observacaoFinal.toUpperCase();
-        }
-
-        await registro.update({ saida: agora, valor: total, observacao: obsCompleta });
-        res.json({ valor: total });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        await registro.update({ saida: agora, valorTotal: total });
+        res.json(registro);
+    } catch (e) { res.status(500).json({ error: "Erro no cálculo" }); }
 });
 
-app.get('/estatisticas', async (req, res) => {
-    try {
-        const historico = await Registro.findAll({ 
-            where: { saida: { [Op.ne]: null } },
-            order: [['identificacao', 'ASC']] // Ordenação padrão por ficha
-        });
-        const lucroTotal = await Registro.sum('valor', { where: { saida: { [Op.ne]: null } } }) || 0;
-        const totalAtendidos = await Registro.count({ where: { saida: { [Op.ne]: null } } });
-        res.json({ historico, lucroTotal, totalAtendidos });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+// DELETE - Remover Registro
+app.delete('/registros/:id', async (req, res) => {
+    const r = await Registro.findByPk(req.params.id);
+    if (!r) return res.status(404).json({ error: "Não encontrado" });
+    await r.destroy();
+    res.json({ message: "Registro apagado" });
 });
 
-// Redirecionamento inicial
-app.get('/', (req, res) => res.redirect('/welcome.html'));
+// Rota Extra de Utilidade
+app.get('/proxima-ficha', async (req, res) => {
+    const ultimo = await Registro.max('id');
+    res.json({ proxima: String((ultimo || 0) + 1).padStart(3, '0') });
+});
 
-// 4. SYNC E POPULAR DADOS
-sequelize.sync({ alter: true }).then(async () => {
-    if (await Marca.count() === 0) {
-        await Marca.bulkCreate([{nome:'CALOI'}, {nome:'OGGI'}, {nome:'SENSE'}, {nome:'BMW'}]);
-        await Cor.bulkCreate([{nome:'PRETA'}, {nome:'BRANCA'}, {nome:'AZUL'}, {nome:'VERMELHA'}]);
-        await Aro.bulkCreate([{tamanho:'26'}, {tamanho:'29'}, {tamanho:'700'}]);
-    }
-    app.listen(3000, () => console.log("BIKE PARK ONLINE: http://localhost:3000"));
+// 5. SERVIDOR E FRONT
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'welcome.html')));
+
+sequelize.sync({ force: false }).then(() => {
+    app.listen(3000, () => console.log("🚀 API BIKE PARK PRONTA PARA O 10!"));
 });
